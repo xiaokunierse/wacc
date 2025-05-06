@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>极简轮播组件</title>
+    <style>
+        :root {
+            --transition-duration: 1s;
+            --max-container-ratio: 0.8;
+            --image-radius: 16px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            touch-action: pan-y;
+        }
+
+        html, body {
+            height: 100%;
+            overflow: hidden;
+            /* 透明背景 */
+            background: transparent;
+        }
+
+        .carousel-wrapper {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        .carousel-container {
+            position: relative;
+            transition: 
+                width var(--transition-duration) ease-in-out,
+                height var(--transition-duration) ease-in-out;
+            overflow: visible;
+        }
+
+        .carousel-track {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+
+        .carousel-item {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            border-radius: var(--image-radius);
+            transition: 
+                opacity var(--transition-duration) ease-in-out,
+                transform calc(var(--transition-duration)*1.2) cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            object-fit: contain;
+            will-change: transform, opacity;
+            /* 移除投影 */
+            box-shadow: none;
+        }
+
+        .carousel-item.active {
+            opacity: 1;
+            transform: translateZ(0);
+            z-index: 1;
+        }
+
+        @media (max-width: 768px) {
+            :root {
+                --max-container-ratio: 0.95;
+                --image-radius: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="carousel-wrapper">
+        <div class="carousel-container">
+            <div class="carousel-track"></div>
+        </div>
+    </div>
+
+    <script>
+        class MinimalCarousel {
+            constructor() {
+                this.images = [
+                    'https://i.ibb.co/pBYKXR4K/1.webp',
+                    'https://i.ibb.co/MxBPQyFq/2.webp',
+                    'https://i.ibb.co/nNLf2sVC/3.webp',
+                    'https://i.ibb.co/mVf1cb9d/4.webp',
+                    'https://i.ibb.co/jZ498X41/5.webp',
+                    'https://i.ibb.co/0jhdPtkh/6.webp',
+                    'https://i.ibb.co/x8J63GMY/7.webp',
+                    'https://i.ibb.co/Wv1fxzdd/8.webp',
+                    'https://i.ibb.co/9kgnJvT7/9.webp',
+                    'https://i.ibb.co/WNB9Dhd1/10.webp',
+                    'https://i.ibb.co/0yYq0GwD/11.webp',
+                    'https://i.ibb.co/gbbZD6dY/12.webp',
+                    'https://i.ibb.co/JjL9XB1F/13.webp',
+                    'https://i.ibb.co/gZbPn7zz/14.webp',
+                    'https://i.ibb.co/60Gy232V/15.webp',
+                    'https://i.ibb.co/1ft2NShV/16.webp',
+                    'https://i.ibb.co/TBMLV8Kc/17.webp',
+                    'https://i.ibb.co/SwMYNtZc/18.webp'
+                ];
+                
+                this.currentIndex = 0;
+                this.imageRatios = [];
+                this.container = document.querySelector('.carousel-container');
+                this.init();
+            }
+
+            async init() {
+                await this.preloadImages();
+                this.createItems();
+                this.startAutoPlay();
+                this.addEventListeners();
+                this.updateContainerSize();
+            }
+
+            async preloadImages() {
+                const loadPromises = this.images.map((src, index) => 
+                    new Promise(resolve => {
+                        const img = new Image();
+                        img.onload = () => {
+                            this.calculateImageRatio(img, index);
+                            resolve();
+                        };
+                        img.onerror = resolve;
+                        img.src = src;
+                    })
+                );
+                await Promise.all(loadPromises);
+            }
+
+            calculateImageRatio(img, index) {
+                const maxWidth = window.innerWidth * 0.8;
+                const maxHeight = window.innerHeight * 0.8;
+                const ratio = img.naturalWidth / img.naturalHeight;
+                
+                const widthRatio = maxWidth / img.naturalWidth;
+                const heightRatio = maxHeight / img.naturalHeight;
+                const scale = Math.min(widthRatio, heightRatio);
+                
+                this.imageRatios[index] = {
+                    width: img.naturalWidth * scale,
+                    height: img.naturalHeight * scale,
+                    ratio: ratio
+                };
+            }
+
+            createItems() {
+                const track = document.querySelector('.carousel-track');
+                this.images.forEach((src, index) => {
+                    const item = document.createElement('img');
+                    item.className = 'carousel-item';
+                    item.src = src;
+                    item.loading = 'eager';
+                    track.appendChild(item);
+                });
+                this.items = Array.from(track.children);
+                this.items[0].classList.add('active');
+            }
+
+            updateContainerSize() {
+                const currentRatio = this.imageRatios[this.currentIndex];
+                this.container.style.width = `${currentRatio.width}px`;
+                this.container.style.height = `${currentRatio.height}px`;
+            }
+
+            async switchItem(newIndex) {
+                if (newIndex === this.currentIndex) return;
+                
+                const prevIndex = this.currentIndex;
+                this.currentIndex = newIndex;
+                
+                this.items[prevIndex].classList.remove('active');
+                this.items[newIndex].classList.add('active');
+                
+                this.updateContainerSize();
+            }
+
+            next() {
+                const newIndex = (this.currentIndex + 1) % this.images.length;
+                this.switchItem(newIndex);
+            }
+
+            startAutoPlay() {
+                setInterval(() => this.next(), 3000);
+            }
+
+            addEventListeners() {
+                let resizeTimer;
+                window.addEventListener('resize', () => {
+                    clearTimeout(resizeTimer);
+                    resizeTimer = setTimeout(() => {
+                        this.imageRatios = [];
+                        this.preloadImages().then(() => {
+                            this.updateContainerSize();
+                        });
+                    }, 200);
+                });
+            }
+        }
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            new MinimalCarousel();
+        });
+    </script>
+</body>
+</html>
